@@ -15,7 +15,7 @@ fan 0: auto target=1350 actual=1500 rpm (28% of max)
 fan 1: auto target=1350 actual=1480 rpm (26% of max)
 ```
 
-(Illustrative output: the write path has not been verified on hardware yet, see [Tested on](#tested-on).)
+(Example output: speeds vary with the Mac and its load.)
 
 Three small tools, no dependencies beyond the macOS SDK:
 
@@ -73,7 +73,7 @@ This is an unofficial tool that writes to hardware controller registers. Use it 
 
 | Mac | macOS | Read tools | Write (`fanset`) |
 |-----|-------|------------|------------------|
-| MacBook Pro M5 Pro (Mac17,8) | 27.0 | verified | not yet verified, run `make test-hw` |
+| MacBook Pro M5 Pro (Mac17,8) | 27.0 | verified | verified |
 
 Results on other Macs are welcome: open an issue with your Mac model, macOS version, and the output of `fankeys` and `make test-hw`.
 
