@@ -1,5 +1,5 @@
 // ABOUTME: Fan control logic behind fanset: set every fan to a percentage of its max, or return them to auto.
-// ABOUTME: All or nothing: any failure in manual mode returns every fan to automatic control.
+// ABOUTME: All or nothing: any failure in manual mode returns every fan to automatic; the read-back fails closed.
 #include "fan.h"
 #include "smc.h"
 
@@ -62,4 +62,32 @@ int fan_apply(const smc_io_t *io, int nfans, int pct, FILE *err) {
     return rc;
   }
   return FAN_OK;
+}
+
+int fan_verify(const smc_io_t *io, int nfans, int pct, int applied, FILE *out, FILE *err) {
+  int want_manual = pct > 0 && applied == FAN_OK;
+  int rc = applied;
+  for (int i = 0; i < nfans; i++) {
+    char k[5];
+    unsigned char md = 0;
+    float ac = 0, tg = 0, max = 0;
+    snprintf(k, sizeof(k), "F%dmd", i);
+    int md_ok = io->read(k, "ui8 ", &md, 1) == 0;
+    snprintf(k, sizeof(k), "F%dAc", i); io->read(k, "flt ", &ac, 4);
+    snprintf(k, sizeof(k), "F%dTg", i); io->read(k, "flt ", &tg, 4);
+    snprintf(k, sizeof(k), "F%dMx", i); io->read(k, "flt ", &max, 4);
+    fprintf(out, "fan %d: %s target=%.0f actual=%.0f rpm (%.0f%% of max)\n", i,
+            !md_ok ? "unknown" : md ? "manual" : "auto", tg, ac, max > 0 ? 100 * ac / max : 0);
+    if (!md_ok) {
+      fprintf(err, "fan %d: cannot read its mode back\n", i);
+      rc |= FAN_FAILED;
+    } else if (want_manual && !md) {
+      fprintf(err, "fan %d: macOS put it back to auto, the setting did not stick\n", i);
+      rc |= FAN_FAILED;
+    } else if (!want_manual && md) {
+      fprintf(err, "fan %d: still in manual mode\n", i);
+      rc |= FAN_FAILED | FAN_STUCK_MANUAL;
+    }
+  }
+  return rc;
 }

@@ -96,6 +96,12 @@ static float target(int i) {
 
 static fake_key_t *key(const char *k) { return find(k); }
 
+static void set_mode(int i, unsigned char md) {
+  char k[5];
+  snprintf(k, sizeof(k), "F%dmd", i);
+  find(k)->bytes[0] = md;
+}
+
 static void test_sets_every_fan_manual_at_pct_of_max(void) {
   fake_reset(2);
   CHECK(fan_apply(&fake, 2, 80, devnull) == FAN_OK);
@@ -176,6 +182,66 @@ static void test_failed_auto_reports_stuck_manual(void) {
   CHECK(fan_apply(&fake, 1, 0, devnull) == (FAN_FAILED | FAN_STUCK_MANUAL));
 }
 
+static void test_auto_continues_past_a_refused_fan(void) {
+  fake_reset(2);
+  fan_apply(&fake, 2, 80, devnull);
+  key("F0md")->fail_on_write = key("F0md")->writes + 1;
+  CHECK(fan_apply(&fake, 2, 0, devnull) == (FAN_FAILED | FAN_STUCK_MANUAL));
+  CHECK(mode(1) == 0);
+}
+
+static void test_rollback_continues_past_a_refused_fan(void) {
+  fake_reset(2);
+  key("F1Tg")->fail_on_write = 1;  // triggers the rollback on fan 1...
+  key("F0md")->fail_on_write = 2;  // ...whose first step (fan 0 back to auto) is refused
+  CHECK(fan_apply(&fake, 2, 80, devnull) == (FAN_FAILED | FAN_STUCK_MANUAL));
+  CHECK(mode(1) == 0);
+}
+
+static void test_rollback_covers_fans_after_the_failing_one(void) {
+  fake_reset(2);
+  set_mode(1, 1);  // left manual by an earlier run
+  key("F0Tg")->fail_on_write = 1;
+  CHECK(fan_apply(&fake, 2, 80, devnull) == FAN_FAILED);
+  CHECK(mode(0) == 0 && mode(1) == 0);
+}
+
+static void test_verify_accepts_the_intended_state(void) {
+  fake_reset(2);
+  CHECK(fan_verify(&fake, 2, 80, fan_apply(&fake, 2, 80, devnull), devnull, devnull) == FAN_OK);
+  CHECK(fan_verify(&fake, 2, 0, fan_apply(&fake, 2, 0, devnull), devnull, devnull) == FAN_OK);
+}
+
+static void test_verify_detects_a_fan_macos_reverted(void) {
+  fake_reset(2);
+  int applied = fan_apply(&fake, 2, 80, devnull);
+  set_mode(0, 0);
+  // fan 1 is still manual as requested: it must not be reported as stuck
+  CHECK(fan_verify(&fake, 2, 80, applied, devnull, devnull) == FAN_FAILED);
+}
+
+static void test_verify_fails_closed_on_an_unreadable_mode(void) {
+  fake_reset(2);
+  int applied = fan_apply(&fake, 2, 0, devnull);
+  key("F0md")->fail_read = 1;
+  CHECK(fan_verify(&fake, 2, 0, applied, devnull, devnull) & FAN_FAILED);
+}
+
+static void test_verify_detects_a_fan_still_manual_after_auto(void) {
+  fake_reset(1);
+  int applied = fan_apply(&fake, 1, 0, devnull);
+  set_mode(0, 1);  // the write was accepted but the fan stayed manual
+  CHECK(fan_verify(&fake, 1, 0, applied, devnull, devnull) == (FAN_FAILED | FAN_STUCK_MANUAL));
+}
+
+static void test_verify_detects_a_fan_still_manual_after_rollback(void) {
+  fake_reset(2);
+  key("F0Tg")->fail_on_write = 1;
+  int applied = fan_apply(&fake, 2, 80, devnull);
+  set_mode(1, 1);  // accepted the return to auto but stayed manual
+  CHECK(fan_verify(&fake, 2, 80, applied, devnull, devnull) == (FAN_FAILED | FAN_STUCK_MANUAL));
+}
+
 int main(void) {
   devnull = fopen("/dev/null", "w");
   test_sets_every_fan_manual_at_pct_of_max();
@@ -189,6 +255,14 @@ int main(void) {
   test_wrong_key_type_is_refused();
   test_failed_rollback_reports_stuck_manual();
   test_failed_auto_reports_stuck_manual();
+  test_auto_continues_past_a_refused_fan();
+  test_rollback_continues_past_a_refused_fan();
+  test_rollback_covers_fans_after_the_failing_one();
+  test_verify_accepts_the_intended_state();
+  test_verify_detects_a_fan_macos_reverted();
+  test_verify_fails_closed_on_an_unreadable_mode();
+  test_verify_detects_a_fan_still_manual_after_auto();
+  test_verify_detects_a_fan_still_manual_after_rollback();
   if (fails) {
     fprintf(stderr, "%d check(s) failed\n", fails);
     return 1;

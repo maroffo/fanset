@@ -40,31 +40,12 @@ int main(int argc, char **argv) {
     smc_close();
     return 1;
   }
+  sleep(4);
+  rc = fan_verify(&smc_io, n, pct, rc, stdout, stderr);
+  smc_close();
   if (rc & FAN_STUCK_MANUAL)
     fprintf(stderr, "fanset: WARNING a fan may still be in manual mode: retry 'sudo fanset auto', or reboot\n");
   else if (rc)
-    fprintf(stderr, "fanset: fans left in automatic mode; run 'fankeys' to inspect this Mac's SMC keys\n");
-
-  sleep(4);
-  for (int i = 0; i < n; i++) {
-    char k[5];
-    unsigned char md = 0;
-    float ac = 0, tg = 0, max = 0;
-    snprintf(k, sizeof(k), "F%dmd", i); smc_read(k, "ui8 ", &md, 1);
-    snprintf(k, sizeof(k), "F%dAc", i); smc_read(k, "flt ", &ac, 4);
-    snprintf(k, sizeof(k), "F%dTg", i); smc_read(k, "flt ", &tg, 4);
-    snprintf(k, sizeof(k), "F%dMx", i); smc_read(k, "flt ", &max, 4);
-    printf("fan %d: %s target=%.0f actual=%.0f rpm (%.0f%% of max)\n", i, md ? "manual" : "auto", tg, ac,
-           max > 0 ? 100 * ac / max : 0);
-    if (!rc && !automode && !md) {
-      fprintf(stderr, "fan %d: macOS put it back to auto, the setting did not stick\n", i);
-      rc = FAN_FAILED;
-    }
-    if (automode && md) {
-      fprintf(stderr, "fan %d: still in manual mode: retry 'sudo fanset auto', or reboot\n", i);
-      rc = FAN_FAILED;
-    }
-  }
-  smc_close();
+    fprintf(stderr, "fanset: run 'fankeys' to inspect this Mac's SMC keys; 'sudo fanset auto' returns every fan to automatic\n");
   return rc ? 1 : 0;
 }
