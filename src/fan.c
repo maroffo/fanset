@@ -66,7 +66,7 @@ int fan_apply(const smc_io_t *io, int nfans, int pct, FILE *err) {
 
 int fan_verify(const smc_io_t *io, int nfans, int pct, int applied, FILE *out, FILE *err) {
   int want_manual = pct > 0 && applied == FAN_OK;
-  int rc = applied;
+  int rc = applied & FAN_FAILED;  // the read-back alone decides which fans are stuck
   for (int i = 0; i < nfans; i++) {
     char k[5];
     unsigned char md = 0;

@@ -258,6 +258,14 @@ static void test_verify_keeps_the_failure_of_a_clean_rollback(void) {
   CHECK(fan_verify(&fake, 2, 80, applied, devnull, devnull) == FAN_FAILED);
 }
 
+static void test_verify_clears_stuck_when_every_fan_reads_auto(void) {
+  fake_reset(1);
+  key("F0md")->fail_on_write = 1;  // the write to auto is refused, but the fan already is auto
+  int applied = fan_apply(&fake, 1, 0, devnull);
+  CHECK(applied == (FAN_FAILED | FAN_STUCK_MANUAL));
+  CHECK(fan_verify(&fake, 1, 0, applied, devnull, devnull) == FAN_FAILED);
+}
+
 int main(void) {
   devnull = fopen("/dev/null", "w");
   test_sets_every_fan_manual_at_pct_of_max();
@@ -280,6 +288,7 @@ int main(void) {
   test_verify_detects_a_fan_still_manual_after_auto();
   test_verify_detects_a_fan_still_manual_after_rollback();
   test_verify_keeps_the_failure_of_a_clean_rollback();
+  test_verify_clears_stuck_when_every_fan_reads_auto();
   if (fails) {
     fprintf(stderr, "%d check(s) failed\n", fails);
     return 1;

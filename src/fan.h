@@ -20,10 +20,10 @@ enum { FAN_OK = 0, FAN_FAILED = 1, FAN_STUCK_MANUAL = 2 };
 int fan_apply(const smc_io_t *io, int nfans, int pct, FILE *err);
 
 // fan_verify: reads every fan back after fan_apply returned `applied`, prints one status
-// line per fan to `out`, and adds FAN_FAILED when the state is not the intended one: a fan
-// macOS reverted to auto, a mode that cannot be read, or a fan still manual after auto or a
-// rollback (those last two also add FAN_STUCK_MANUAL when no fan should be manual). Returns
-// `applied` otherwise.
+// line per fan to `out`, and returns FAN_FAILED when `applied` failed or the state is not the
+// intended one: a fan macOS reverted to auto, a mode that cannot be read, or a fan still
+// manual after auto or a rollback. FAN_STUCK_MANUAL comes only from the read-back: it is set
+// when a fan reads manual, or cannot be read, while no fan should be manual.
 int fan_verify(const smc_io_t *io, int nfans, int pct, int applied, FILE *out, FILE *err);
 
 #endif
