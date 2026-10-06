@@ -35,6 +35,7 @@ static void test_fan_target(void) {
   CHECK(fan_target(100, 1350, 5349) == 5349);
   CHECK(fan_target(10, 1350, 5349) == 1350);  // 535 rpm would be below min
   CHECK(fan_target(80, 0, 0) < 0);            // max unreadable or zero
+  CHECK(fan_target(1, 0, 5349) < 0);          // zero min would allow a near-stopped fan
   CHECK(fan_target(80, 6000, 5000) < 0);      // min above max
   CHECK(fan_target(80, -1, 5000) < 0);
   CHECK(fan_target(80, NAN, 5000) < 0);
