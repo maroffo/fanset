@@ -64,6 +64,10 @@ static void fake_reset(int nfans) {
 
 static int fake_read(const char *key, const char *type, void *out, UInt32 size) {
   fake_key_t *k = find(key);
+  if (k && k->fail_read && k->size == size) {
+    memcpy(out, k->bytes, size);  // plausible stale bytes: callers must check the result, not the value
+    return -1;
+  }
   if (!k || k->fail_read || strcmp(k->type, type) || k->size != size) return -1;
   memcpy(out, k->bytes, size);
   return 0;
@@ -224,7 +228,11 @@ static void test_verify_fails_closed_on_an_unreadable_mode(void) {
   fake_reset(2);
   int applied = fan_apply(&fake, 2, 0, devnull);
   key("F0md")->fail_read = 1;
-  CHECK(fan_verify(&fake, 2, 0, applied, devnull, devnull) & FAN_FAILED);
+  CHECK(fan_verify(&fake, 2, 0, applied, devnull, devnull) == (FAN_FAILED | FAN_STUCK_MANUAL));
+  fake_reset(2);
+  applied = fan_apply(&fake, 2, 80, devnull);
+  key("F0md")->fail_read = 1;
+  CHECK(fan_verify(&fake, 2, 80, applied, devnull, devnull) == FAN_FAILED);
 }
 
 static void test_verify_detects_a_fan_still_manual_after_auto(void) {
@@ -240,6 +248,14 @@ static void test_verify_detects_a_fan_still_manual_after_rollback(void) {
   int applied = fan_apply(&fake, 2, 80, devnull);
   set_mode(1, 1);  // accepted the return to auto but stayed manual
   CHECK(fan_verify(&fake, 2, 80, applied, devnull, devnull) == (FAN_FAILED | FAN_STUCK_MANUAL));
+}
+
+static void test_verify_keeps_the_failure_of_a_clean_rollback(void) {
+  fake_reset(2);
+  key("F1Tg")->fail_on_write = 1;
+  int applied = fan_apply(&fake, 2, 80, devnull);
+  CHECK(mode(0) == 0 && mode(1) == 0);
+  CHECK(fan_verify(&fake, 2, 80, applied, devnull, devnull) == FAN_FAILED);
 }
 
 int main(void) {
@@ -263,6 +279,7 @@ int main(void) {
   test_verify_fails_closed_on_an_unreadable_mode();
   test_verify_detects_a_fan_still_manual_after_auto();
   test_verify_detects_a_fan_still_manual_after_rollback();
+  test_verify_keeps_the_failure_of_a_clean_rollback();
   if (fails) {
     fprintf(stderr, "%d check(s) failed\n", fails);
     return 1;

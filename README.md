@@ -59,10 +59,10 @@ The tools talk to the `AppleSMC` kernel service through IOKit. `fanset` writes e
 
 - `fanset auto` or a reboot always returns the fans to automatic control.
 - `fanset` refuses to run without root, and accepts only `auto` or a plain integer from 1 to 100.
-- It reads min and max before changing anything; if they are missing or implausible (a min of 0 included), nothing is switched to manual.
-- All or nothing: if any fan fails along the way, every fan is returned to automatic. If even that fails, it prints a warning telling you to retry `sudo fanset auto` or reboot.
+- It reads each fan's min and max before switching that fan; if they are missing or implausible (a min of 0 included), that fan is not switched, and the rollback below returns any fan already switched.
+- All or nothing on writes: if any write fails along the way, every fan is returned to automatic. If even that fails, it prints a warning telling you to retry `sudo fanset auto` or reboot.
 - Every read and write checks the key's type and size first. On a Mac whose keys have a different layout (Intel Macs use `fpe2` instead of `flt`) the write is refused instead of corrupting a value.
-- After writing, it waits 4 seconds and reads everything back. If macOS has reverted a fan to automatic, a fan is still manual when it should not be, or a mode cannot be read back, it says so and exits with an error.
+- After writing, it waits 4 seconds and reads everything back. If macOS has reverted a fan to automatic (the other fans stay as set), a fan is still manual when it should not be, or a mode cannot be read back, it says so and exits with an error.
 - The rollback and read-back paths are unit-tested against a fake SMC (`tests/test_fan.c`), since they cannot be triggered on demand on real hardware.
 
 Forcing a fan to a fixed speed overrides macOS thermal management for the fans (the CPU still throttles on its own when it is hot). A high fixed speed is the safe direction; prefer `auto` for everyday use.

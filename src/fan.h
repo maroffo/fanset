@@ -22,7 +22,8 @@ int fan_apply(const smc_io_t *io, int nfans, int pct, FILE *err);
 // fan_verify: reads every fan back after fan_apply returned `applied`, prints one status
 // line per fan to `out`, and adds FAN_FAILED when the state is not the intended one: a fan
 // macOS reverted to auto, a mode that cannot be read, or a fan still manual after auto or a
-// rollback (that last case also adds FAN_STUCK_MANUAL). Returns `applied` otherwise.
+// rollback (those last two also add FAN_STUCK_MANUAL when no fan should be manual). Returns
+// `applied` otherwise.
 int fan_verify(const smc_io_t *io, int nfans, int pct, int applied, FILE *out, FILE *err);
 
 #endif

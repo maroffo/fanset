@@ -78,9 +78,9 @@ int fan_verify(const smc_io_t *io, int nfans, int pct, int applied, FILE *out, F
     snprintf(k, sizeof(k), "F%dMx", i); io->read(k, "flt ", &max, 4);
     fprintf(out, "fan %d: %s target=%.0f actual=%.0f rpm (%.0f%% of max)\n", i,
             !md_ok ? "unknown" : md ? "manual" : "auto", tg, ac, max > 0 ? 100 * ac / max : 0);
-    if (!md_ok) {
+    if (!md_ok) {  // after auto or a rollback, an unknown mode may still be manual
       fprintf(err, "fan %d: cannot read its mode back\n", i);
-      rc |= FAN_FAILED;
+      rc |= want_manual ? FAN_FAILED : FAN_FAILED | FAN_STUCK_MANUAL;
     } else if (want_manual && !md) {
       fprintf(err, "fan %d: macOS put it back to auto, the setting did not stick\n", i);
       rc |= FAN_FAILED;
