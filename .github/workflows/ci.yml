@@ -1,0 +1,27 @@
+# ABOUTME: CI workflow - warnings-as-errors build, unit, CLI and e2e tests on every push and pull request.
+# ABOUTME: Runs on a macOS runner (IOKit); e2e skips there without fans and the write test (make test-hw) never runs.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and test
+        run: make check
+
+      - name: End-to-end (skips without fans)
+        run: make test-e2e
