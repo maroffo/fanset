@@ -1,53 +1,18 @@
 // ABOUTME: Sets every Mac fan to a fixed percentage of its max speed, or returns them to automatic control.
 // ABOUTME: Usage: sudo fanset <1-100> | sudo fanset auto. Writes only the SMC keys Fnmd (mode) and FnTg (target).
+#include "fan.h"
 #include "smc.h"
-#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
+static const smc_io_t smc_io = {smc_read, smc_write};
+
 static int usage(void) {
-  fprintf(stderr, "usage: sudo fanset <1-100> | sudo fanset auto\n");
+  fprintf(stderr,
+          "usage: sudo fanset <1-100> | sudo fanset auto\n"
+          "  <1-100>  fixed speed, as a percentage of each fan's max (never below its min)\n"
+          "  auto     return every fan to automatic control\n");
   return 2;
-}
-
-static int set_auto(int i) {
-  char k[5];
-  unsigned char md = 0;
-  snprintf(k, sizeof(k), "F%dmd", i);
-  if (smc_write(k, &md, 1)) {
-    fprintf(stderr, "fan %d: mode write refused\n", i);
-    return 1;
-  }
-  return 0;
-}
-
-// set_manual reads min/max before touching anything, and restores automatic
-// mode if the target write fails, so a fan is never left manual at a stale speed.
-static int set_manual(int i, int pct) {
-  char k[5];
-  float min, max;
-  snprintf(k, sizeof(k), "F%dMn", i);
-  int bad = smc_read(k, &min, 4);
-  snprintf(k, sizeof(k), "F%dMx", i);
-  bad |= smc_read(k, &max, 4);
-  float tg = bad ? -1 : fan_target(pct, min, max);
-  if (tg < 0) {
-    fprintf(stderr, "fan %d: cannot read a plausible min/max, left untouched\n", i);
-    return 1;
-  }
-  unsigned char md = 1;
-  snprintf(k, sizeof(k), "F%dmd", i);
-  if (smc_write(k, &md, 1)) {
-    fprintf(stderr, "fan %d: mode write refused\n", i);
-    return 1;
-  }
-  snprintf(k, sizeof(k), "F%dTg", i);
-  if (smc_write(k, &tg, 4)) {
-    fprintf(stderr, "fan %d: target write refused, restoring automatic mode\n", i);
-    set_auto(i);
-    return 1;
-  }
-  return 0;
 }
 
 int main(int argc, char **argv) {
@@ -64,35 +29,42 @@ int main(int argc, char **argv) {
     return 1;
   }
   unsigned char n = 0;
-  if (smc_read("FNum", &n, 1) || n > 9) {
+  if (smc_read("FNum", "ui8 ", &n, 1)) {
     fprintf(stderr, "fanset: cannot read fan count\n");
     smc_close();
     return 1;
   }
 
-  int rc = 0;
-  for (int i = 0; i < n; i++) rc |= automode ? set_auto(i) : set_manual(i, pct);
+  int rc = fan_apply(&smc_io, n, pct, stderr);
+  if (n < 1 || n > 9) {  // fan_apply already said why nothing changed
+    smc_close();
+    return 1;
+  }
+  if (rc & FAN_STUCK_MANUAL)
+    fprintf(stderr, "fanset: WARNING a fan may still be in manual mode: retry 'sudo fanset auto', or reboot\n");
+  else if (rc)
+    fprintf(stderr, "fanset: fans left in automatic mode; run 'fankeys' to inspect this Mac's SMC keys\n");
 
   sleep(4);
   for (int i = 0; i < n; i++) {
     char k[5];
     unsigned char md = 0;
     float ac = 0, tg = 0, max = 0;
-    snprintf(k, sizeof(k), "F%dmd", i); smc_read(k, &md, 1);
-    snprintf(k, sizeof(k), "F%dAc", i); smc_read(k, &ac, 4);
-    snprintf(k, sizeof(k), "F%dTg", i); smc_read(k, &tg, 4);
-    snprintf(k, sizeof(k), "F%dMx", i); smc_read(k, &max, 4);
+    snprintf(k, sizeof(k), "F%dmd", i); smc_read(k, "ui8 ", &md, 1);
+    snprintf(k, sizeof(k), "F%dAc", i); smc_read(k, "flt ", &ac, 4);
+    snprintf(k, sizeof(k), "F%dTg", i); smc_read(k, "flt ", &tg, 4);
+    snprintf(k, sizeof(k), "F%dMx", i); smc_read(k, "flt ", &max, 4);
     printf("fan %d: %s target=%.0f actual=%.0f rpm (%.0f%% of max)\n", i, md ? "manual" : "auto", tg, ac,
            max > 0 ? 100 * ac / max : 0);
-    if (!automode && !md) {
+    if (!rc && !automode && !md) {
       fprintf(stderr, "fan %d: macOS put it back to auto, the setting did not stick\n", i);
-      rc = 1;
+      rc = FAN_FAILED;
     }
     if (automode && md) {
-      fprintf(stderr, "fan %d: still in manual mode\n", i);
-      rc = 1;
+      fprintf(stderr, "fan %d: still in manual mode: retry 'sudo fanset auto', or reboot\n", i);
+      rc = FAN_FAILED;
     }
   }
   smc_close();
-  return rc;
+  return rc ? 1 : 0;
 }

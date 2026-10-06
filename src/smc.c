@@ -71,18 +71,19 @@ int smc_get(UInt32 key, smc_val_t *v) {
   return 0;
 }
 
-int smc_read(const char *key, void *out, UInt32 size) {
+int smc_read(const char *key, const char *type, void *out, UInt32 size) {
   smc_val_t v;
-  if (smc_get(smc_key(key), &v) || v.size != size) return -1;
+  if (smc_get(smc_key(key), &v) || v.type != smc_key(type) || v.size != size) return -1;
   memcpy(out, v.bytes, size);
   return 0;
 }
 
-int smc_write(const char *key, const void *val, UInt32 size) {
+int smc_write(const char *key, const char *type, const void *val, UInt32 size) {
   smc_msg_t in = {0}, out;
   in.key = smc_key(key);
   in.data8 = CMD_KEY_INFO;
-  if (call(&in, &out) || out.info.dataSize != size || size > sizeof(in.bytes)) return -1;
+  if (call(&in, &out) || out.info.dataType != smc_key(type) || out.info.dataSize != size || size > sizeof(in.bytes))
+    return -1;
   in.info.dataSize = size;
   in.data8 = CMD_WRITE;
   memcpy(in.bytes, val, size);
@@ -126,7 +127,7 @@ int parse_percent(const char *s) {
 }
 
 float fan_target(int pct, float min, float max) {
-  if (!(max > 0) || !(min >= 0) || min > max) return -1;
+  if (!(max > 0) || !(min > 0) || min > max) return -1;
   float t = max * (float)pct / 100.0f;
   return t < min ? min : t;
 }

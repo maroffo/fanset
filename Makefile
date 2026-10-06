@@ -7,31 +7,34 @@ LDLIBS  := -framework IOKit
 PREFIX  ?= /usr/local
 BIN     := bin
 TOOLS   := fanset fanread fankeys
+LIB     := src/smc.c src/fan.c
+HDRS    := src/smc.h src/fan.h
 
 .PHONY: help all check test test-unit test-cli test-e2e test-hw install uninstall clean
 
 .DEFAULT_GOAL := help
 
 help: ## Show this help
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 all: $(TOOLS:%=$(BIN)/%) ## Build the three tools into bin/
 
-$(BIN)/test_helpers: tests/test_helpers.c src/smc.c src/smc.h | $(BIN)
-	$(CC) $(CFLAGS) -o $@ tests/test_helpers.c src/smc.c $(LDLIBS)
+$(BIN)/test_%: tests/test_%.c $(LIB) $(HDRS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ tests/test_$*.c $(LIB) $(LDLIBS)
 
-$(BIN)/%: src/%.c src/smc.c src/smc.h | $(BIN)
-	$(CC) $(CFLAGS) -o $@ src/$*.c src/smc.c $(LDLIBS)
+$(BIN)/%: src/%.c $(LIB) $(HDRS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ src/$*.c $(LIB) $(LDLIBS)
 
 $(BIN):
 	mkdir -p $@
 
-check: test ## Build with warnings as errors and run unit + CLI tests (CI gate)
+check: test-unit test-cli ## CI gate: warnings-as-errors build, unit + CLI tests
 
-test: test-unit test-cli ## Run unit + CLI tests
+test: check ## Same as check
 
-test-unit: $(BIN)/test_helpers ## Unit tests for the hardware-free helpers
+test-unit: $(BIN)/test_helpers $(BIN)/test_fan ## Unit tests: helpers, and fan logic against a fake SMC
 	$(BIN)/test_helpers
+	$(BIN)/test_fan
 
 test-cli: all ## CLI tests: argument and permission handling, no hardware needed
 	BIN=$(BIN) tests/test_cli.sh
@@ -42,7 +45,7 @@ test-e2e: all ## End-to-end read tests on the real SMC (skip where there are no 
 test-hw: all ## End-to-end write test on real fans (asks for sudo, restores auto mode)
 	BIN=$(BIN) tests/test_hw.sh
 
-install: all ## Install the tools to $(PREFIX)/bin (default /usr/local/bin, usually needs sudo)
+install: all ## Install the tools to PREFIX/bin (default /usr/local/bin, usually needs sudo)
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 755 $(TOOLS:%=$(BIN)/%) $(DESTDIR)$(PREFIX)/bin/
 

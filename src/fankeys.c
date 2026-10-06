@@ -3,7 +3,12 @@
 #include "smc.h"
 #include <stdio.h>
 
-int main(void) {
+int main(int argc, char **argv) {
+  (void)argv;
+  if (argc > 1) {
+    fprintf(stderr, "usage: fankeys\n");
+    return 2;
+  }
   if (smc_open()) {
     fprintf(stderr, "fankeys: cannot open SMC\n");
     return 1;

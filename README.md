@@ -11,7 +11,11 @@ fan 0: manual target=4279 actual=3950 rpm (74% of max)
 fan 1: manual target=4622 actual=4310 rpm (75% of max)
 
 $ sudo fanset auto
+fan 0: auto target=1350 actual=1500 rpm (28% of max)
+fan 1: auto target=1350 actual=1480 rpm (26% of max)
 ```
+
+(Illustrative output: the write path has not been verified on hardware yet, see [Tested on](#tested-on).)
 
 Three small tools, no dependencies beyond the macOS SDK:
 
@@ -20,7 +24,7 @@ Three small tools, no dependencies beyond the macOS SDK:
 | `fanset <1-100>` | Fixes every fan at that percentage of its max speed (never below its min) | yes |
 | `fanset auto` | Returns every fan to automatic control | yes |
 | `fanread` | Shows actual, target, min, max speed and mode for every fan | no |
-| `fankeys` | Lists every fan-related SMC key with type, size, attributes and value | no |
+| `fankeys` | Lists every SMC key starting with `F` (the fan keys and a few others) with type, size, attributes and value | no |
 
 ## Why
 
@@ -29,6 +33,7 @@ macOS has no built-in command to control the fans. The classic tools (smcFanCont
 ## Requirements
 
 - An Apple Silicon Mac with fans (MacBook Air has none)
+- macOS 12 or later
 - Xcode Command Line Tools (`xcode-select --install`)
 
 ## Build and install
@@ -54,10 +59,11 @@ The tools talk to the `AppleSMC` kernel service through IOKit. `fanset` writes e
 
 - `fanset auto` or a reboot always returns the fans to automatic control.
 - `fanset` refuses to run without root, and accepts only `auto` or a plain integer from 1 to 100.
-- It reads min and max before changing anything; if they are missing or implausible, the fan is left untouched.
-- If the target write fails after the switch to manual, it switches the fan back to automatic, so a fan is never left manual at a stale speed.
-- Every write checks the key size first. On a Mac whose keys have a different layout (Intel Macs use `fpe2` instead of `flt`) the write is refused instead of corrupting a value.
+- It reads min and max before changing anything; if they are missing or implausible (a min of 0 included), nothing is switched to manual.
+- All or nothing: if any fan fails along the way, every fan is returned to automatic. If even that fails, it prints a warning telling you to retry `sudo fanset auto` or reboot.
+- Every read and write checks the key's type and size first. On a Mac whose keys have a different layout (Intel Macs use `fpe2` instead of `flt`) the write is refused instead of corrupting a value.
 - After writing, it waits 4 seconds and reads everything back. If macOS has reverted a fan to automatic, it says so and exits with an error.
+- The rollback paths are unit-tested against a fake SMC (`tests/test_fan.c`), since they cannot be triggered on demand on real hardware.
 
 Forcing a fan to a fixed speed overrides macOS thermal management for the fans (the CPU still throttles on its own when it is hot). A high fixed speed is the safe direction; prefer `auto` for everyday use.
 
@@ -69,12 +75,12 @@ This is an unofficial tool that writes to hardware controller registers. Use it 
 |-----|-------|------------|------------------|
 | MacBook Pro M5 Pro (Mac17,8) | 27.0 | verified | not yet verified, run `make test-hw` |
 
-Results on other Macs are welcome: open an issue with your model and the output of `fankeys`.
+Results on other Macs are welcome: open an issue with your Mac model, macOS version, and the output of `fankeys` and `make test-hw`.
 
 ## Tests
 
 ```
-make check     # warnings-as-errors build, unit tests, CLI tests
+make check     # warnings-as-errors build, unit tests (incl. fan logic on a fake SMC), CLI tests
 make test-e2e  # fanread and fankeys against the real SMC (skips without fans)
 make test-hw   # end-to-end write test on real fans: asks for sudo, sets 60%,
                # checks manual mode and spin-up, then restores automatic mode

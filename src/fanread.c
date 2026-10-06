@@ -9,7 +9,12 @@ static double num(const char *key) {
   return smc_get(smc_key(key), &v) ? NAN : smc_number(&v);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  (void)argv;
+  if (argc > 1) {
+    fprintf(stderr, "usage: fanread\n");
+    return 2;
+  }
   if (smc_open()) {
     fprintf(stderr, "fanread: cannot open SMC\n");
     return 1;

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ABOUTME: CLI tests: argument and permission checks for fanset (usage errors, refusal without root).
+# ABOUTME: CLI tests: argument and permission checks for the three tools (usage errors, refusal without root).
 # ABOUTME: Need no hardware and no root; the real-SMC checks live in test_e2e.sh and test_hw.sh.
 set -uo pipefail
 BIN=${BIN:-bin}
@@ -22,6 +22,9 @@ expect "fanset: zero" 2 "usage:" -- "$BIN/fanset" 0
 expect "fanset: above 100" 2 "usage:" -- "$BIN/fanset" 150
 expect "fanset: not a number" 2 "usage:" -- "$BIN/fanset" abc
 expect "fanset: trailing junk" 2 "usage:" -- "$BIN/fanset" 80abc
+expect "fanset: usage explains the percentage" 2 "percentage of each fan's max" -- "$BIN/fanset"
+expect "fanread: rejects arguments" 2 "usage: fanread" -- "$BIN/fanread" extra
+expect "fankeys: rejects arguments" 2 "usage: fankeys" -- "$BIN/fankeys" extra
 if [[ $(id -u) -ne 0 ]]; then
   expect "fanset: refuses without root" 1 "needs root" -- "$BIN/fanset" 80
   expect "fanset auto: refuses without root" 1 "needs root" -- "$BIN/fanset" auto
